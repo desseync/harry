@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 // Get environment variables
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const authRedirectUrl = import.meta.env.VITE_AUTH_REDIRECT_URL || `${window.location.origin}/auth/callback`;
 
 // Enhanced validation with detailed checks
 const validateConfig = () => {
@@ -12,8 +13,10 @@ const validateConfig = () => {
     issues.push('VITE_SUPABASE_URL is missing');
   } else {
     // Ensure URL has https:// prefix
-    const url = supabaseUrl.startsWith('https://') ? supabaseUrl : `https://${supabaseUrl}`;
-    if (!url.endsWith('.supabase.co')) {
+    if (!supabaseUrl.startsWith('https://')) {
+      issues.push('VITE_SUPABASE_URL must start with https://');
+    }
+    if (!supabaseUrl.endsWith('.supabase.co')) {
       issues.push('VITE_SUPABASE_URL must end with .supabase.co');
     }
   }
@@ -32,19 +35,12 @@ const validateConfig = () => {
 };
 
 // Get the appropriate redirect URL based on environment
-const getRedirectUrl = () => {
-  const baseUrl = import.meta.env.PROD 
-    ? window.location.origin 
-    : (import.meta.env.VITE_AUTH_REDIRECT_URL || window.location.origin);
-  return `${baseUrl}/auth/callback`;
-};
+const getRedirectUrl = () => authRedirectUrl;
 
 // Ensure URL has https:// prefix
-const getFormattedUrl = (url: string) => {
-  return url.startsWith('https://') ? url : `https://${url}`;
-};
+const getFormattedUrl = (url: string) => url.startsWith('https://') ? url : `https://${url}`;
 
-// Create Supabase client with enhanced error handling and retry logic
+// Create Supabase client with enhanced error handling
 export const supabase = validateConfig()
   ? createClient(getFormattedUrl(supabaseUrl), supabaseAnonKey, {
       auth: {
@@ -61,9 +57,6 @@ export const supabase = validateConfig()
       db: {
         schema: 'public',
       },
-      // Add retry configuration
-      retryAttempts: 3,
-      retryInterval: 1000,
     })
   : null;
 
