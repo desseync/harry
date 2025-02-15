@@ -3,88 +3,83 @@ import { createClient } from '@supabase/supabase-js';
 // Get environment variables
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const authRedirectUrl = import.meta.env.VITE_AUTH_REDIRECT_URL || `${window.location.origin}/auth/callback`;
+const authRedirectUrl =
+  import.meta.env.VITE_AUTH_REDIRECT_URL || `${window.location.origin}/auth/callback`;
 
-// Enhanced validation with detailed checks
+// Helper to validate and log environment variables
 const validateConfig = () => {
-  const issues = [];
-  
+  const errors: string[] = [];
+  const logs: string[] = [];
+
   if (!supabaseUrl) {
-    issues.push('VITE_SUPABASE_URL is missing');
+    errors.push('VITE_SUPABASE_URL is missing.');
   } else {
-    // Ensure URL has https:// prefix
+    logs.push(`VITE_SUPABASE_URL: ${supabaseUrl}`);
     if (!supabaseUrl.startsWith('https://')) {
-      issues.push('VITE_SUPABASE_URL must start with https://');
+      errors.push('VITE_SUPABASE_URL must start with https://');
     }
     if (!supabaseUrl.endsWith('.supabase.co')) {
-      issues.push('VITE_SUPABASE_URL must end with .supabase.co');
+      errors.push('VITE_SUPABASE_URL must end with .supabase.co');
     }
   }
 
   if (!supabaseAnonKey) {
-    issues.push('VITE_SUPABASE_ANON_KEY is missing');
-  } else if (supabaseAnonKey.length < 20) {
-    issues.push('VITE_SUPABASE_ANON_KEY appears to be invalid');
-  }
-
-  if (import.meta.env.DEV && issues.length > 0) {
-    console.error('Supabase Configuration Issues:', issues);
-  }
-
-  return issues.length === 0;
-};
-
-// Get the appropriate redirect URL based on environment
-const getRedirectUrl = () => authRedirectUrl;
-
-// Ensure URL has https:// prefix
-const getFormattedUrl = (url: string) => url.startsWith('https://') ? url : `https://${url}`;
-
-// Create Supabase client with enhanced error handling
-export const supabase = validateConfig()
-  ? createClient(getFormattedUrl(supabaseUrl), supabaseAnonKey, {
-      auth: {
-        autoRefreshToken: true,
-        persistSession: true,
-        detectSessionInUrl: true,
-        storage: window.localStorage,
-        flowType: 'pkce',
-        redirectTo: getRedirectUrl(),
-      },
-      global: {
-        headers: { 'x-client-info': 'frequency-ai-web' },
-      },
-      db: {
-        schema: 'public',
-      },
-    })
-  : null;
-
-// Export helper to check if Supabase is configured
-export const isSupabaseConfigured = () => {
-  if (!supabase) {
-    // Log detailed error in development
-    if (import.meta.env.DEV) {
-      console.error('Supabase Configuration Status:', {
-        url: supabaseUrl ? 'Present' : 'Missing',
-        key: supabaseAnonKey ? 'Present' : 'Missing',
-        urlValid: supabaseUrl?.includes('.supabase.co'),
-        formattedUrl: supabaseUrl ? getFormattedUrl(supabaseUrl) : null,
-        redirectUrl: getRedirectUrl(),
-      });
+    errors.push('VITE_SUPABASE_ANON_KEY is missing.');
+  } else {
+    logs.push('VITE_SUPABASE_ANON_KEY: Present');
+    if (supabaseAnonKey.length < 20) {
+      errors.push('VITE_SUPABASE_ANON_KEY appears to be invalid (too short).');
     }
-    return false;
   }
-  return true;
+
+  if (!authRedirectUrl) {
+    errors.push('VITE_AUTH_REDIRECT_URL is missing.');
+  } else {
+    logs.push(`VITE_AUTH_REDIRECT_URL: ${authRedirectUrl}`);
+    if (!authRedirectUrl.startsWith('https://')) {
+      errors.push('VITE_AUTH_REDIRECT_URL must start with https://');
+    }
+  }
+
+  console.log('Supabase Configuration Logs:', logs.join('\n'));
+  if (errors.length > 0) {
+    console.error('Supabase Configuration Errors:', errors.join('\n'));
+  }
+
+  return errors.length === 0;
 };
 
-// Debug check - log Supabase client status
-console.log('Supabase client initialization:', {
-  configured: isSupabaseConfigured(),
-  client: supabase ? 'Present' : 'Missing',
-  auth: supabase?.auth ? 'Present' : 'Missing'
-});
+// Create Supabase client or handle failure gracefully
+export const supabase = (() => {
+  if (!validateConfig()) {
+    console.error('Supabase client failed to initialize. Fix the errors listed above.');
+    return null;
+  }
 
-if (!supabase) {
-  throw new Error('Supabase client is not initialized properly. Check your environment variables.');
+  console.log('Supabase client is initializing...');
+  return createClient(supabaseUrl!, supabaseAnonKey!, {
+    auth: {
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: true,
+      storage: window.localStorage,
+      redirectTo: authRedirectUrl,
+    },
+    global: {
+      headers: { 'x-client-info': 'frequency-ai-web' },
+    },
+    db: {
+      schema: 'public',
+    },
+  });
+})();
+
+// Export a helper function to check if Supabase is configured
+export const isSupabaseConfigured = () => !!supabase;
+
+// Log final initialization status
+if (supabase) {
+  console.log('Supabase client initialized successfully.');
+} else {
+  console.error('Supabase client initialization failed. Check your environment variables.');
 }
